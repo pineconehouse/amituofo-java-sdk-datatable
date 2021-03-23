@@ -1,0 +1,78 @@
+package com.amtf.datafile.core.xsv;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+
+import com.amtf.datafile.DataException;
+import com.amtf.datafile.DataTableDefinition;
+
+public class XsvDataTableStreamBeta extends CharactersStreamDataTable {
+
+	private InputStreamReader streamReader = null;
+	private OutputStreamWriter streamWriter = null;
+	private File file = null;
+	private String charset = "UTF-8";
+
+	public XsvDataTableStreamBeta(String name, DataTableDefinition definition, File file, String charset, int startRow, boolean firstRowTitle) throws DataException {
+		super(name, definition, createReader(file, charset), createWriter(file, charset, true), startRow, firstRowTitle);
+		this.file = file;
+		this.charset = charset;
+		this.streamReader = super.getStreamReader();
+		this.streamWriter = super.getStreamWriter();
+	}
+
+	public void close() {
+		super.close();
+
+		if (streamReader != null) {
+			try {
+				streamReader.close();
+			} catch (IOException e) {
+			}
+			streamReader = null;
+		}
+
+		if (streamWriter != null) {
+			try {
+				streamWriter.flush();
+				streamWriter.close();
+			} catch (IOException e) {
+			}
+			streamWriter = null;
+		}
+	}
+
+	public void truncate() throws DataException {
+		try {
+			createWriter(file, charset, false);
+		} catch (DataException e) {
+			e.printStackTrace();
+			throw new DataException(e);
+		}
+	}
+
+	// ----------------------------------------------------------------------------------------------
+
+	private static InputStreamReader createReader(File file, String charset) throws DataException {
+		try {
+			return new InputStreamReader(new FileInputStream(file), charset);
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new DataException(e);
+		}
+	}
+
+	private static OutputStreamWriter createWriter(File file, String charset, boolean append) throws DataException {
+		try {
+			return new OutputStreamWriter(new FileOutputStream(file, append), charset);
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new DataException(e);
+		}
+	}
+
+}

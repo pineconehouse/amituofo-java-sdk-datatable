@@ -1,0 +1,311 @@
+package com.amtf.datafile.core.xsv;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.amtf.datafile.DataException;
+import com.amtf.datafile.DataRecord;
+import com.amtf.datafile.DataTable;
+import com.amtf.datafile.DataTableDefinition;
+import com.amtf.datafile.core.std.AbsDataTable;
+
+public class CharactersStreamDataTable extends AbsDataTable<String, String> {
+
+	private static final String CRLF = "\r\n";
+
+	private InputStreamReader streamReader = null;
+	private OutputStreamWriter streamWriter = null;
+	private BufferedReader bufferedReader = null;
+
+	private int startRow = 1;
+	private boolean firstRowTitle;
+
+	public CharactersStreamDataTable(String name, DataTableDefinition definition, InputStreamReader inputStreamReader, OutputStreamWriter outputStreamWriter, int startRow,
+			boolean firstRowTitle) throws DataException {
+		super(name, definition);
+		this.streamReader = inputStreamReader;
+		this.streamWriter = outputStreamWriter;
+		this.startRow = startRow;
+		this.firstRowTitle = firstRowTitle;
+//		this.CRLF = newLineSeparator;
+
+		createReader();
+
+		readTitleLine();
+
+		detectFieldsDefinition();
+	}
+
+	public DataRecord readFirstLine() throws DataException {
+		createReader();
+
+		readTitleLine();
+
+		return readNextLine();
+	}
+
+	public DataRecord readNextLine() throws DataException {
+		String row = null;
+		try {
+			row = bufferedReader.readLine();
+		} catch (IOException e) {
+			throw new DataException(e);
+		}
+
+		if (row != null) {
+			currentReadingLine++;
+			return recordParser.parse(definition, row);
+		}
+
+		return null;
+	}
+
+	public List<DataRecord> readFirstLines(int readCount) throws DataException {
+		createReader();
+
+		readTitleLine();
+
+		return readNextLines(readCount);
+
+		// DataRecord record = detectNextFields();
+		//
+		// int index = 1;
+		// List<DataRecord> content = new ArrayList<DataRecord>(readCount);
+		// String row = null;
+		// while (record != null) {
+		// content.add(record);
+		//
+		// if (index >= readCount) {
+		// return content;
+		// }
+		//
+		// try {
+		// row = bufferedReader.readLine();
+		// } catch (IOException e) {
+		// throw new DataException(e);
+		// }
+		//
+		// currentReadingLine++;
+		// index++;
+		//
+		// record = recordParser.parse(definition, row);
+		// }
+
+		// return content.size() == 0 ? null : content;
+	}
+
+	public List<DataRecord> readNextLines(int readCount) throws DataException {
+		if (readCount <= 0) {
+			return null;
+		}
+
+		int index = 1;
+		List<DataRecord> content = new ArrayList<DataRecord>(readCount);
+
+		do {
+			String row = null;
+			try {
+				row = bufferedReader.readLine();
+			} catch (IOException e) {
+				throw new DataException(e);
+			}
+			if (row == null) {
+				if (content.size() == 0) {
+					content = null;
+				}
+				break;
+			} else {
+				content.add(recordParser.parse(definition, row));
+				currentReadingLine++;
+				index++;
+			}
+		} while (index <= readCount);
+
+		return content;
+	}
+
+	public void writeRecord(DataRecord row) throws DataException {
+		try {
+//			streamWriter.write(recordParser.parse(definition, row) + CRLF);
+			 streamWriter.write(recordRender.rending(row) + CRLF);
+		} catch (IOException e) {
+			throw new DataException(e);
+		}
+		currentWritenLine++;
+	}
+
+	public void writeRecord(List<DataRecord> rows) throws DataException {
+		if (rows != null) {
+			for (DataRecord row : rows) {
+				try {
+//					streamWriter.write(recordParser.parse(definition, row) + CRLF);
+					 streamWriter.write(recordRender.rending(row) + CRLF);
+				} catch (IOException e) {
+					throw new DataException(e);
+				}
+				currentWritenLine++;
+			}
+		}
+	}
+
+	public void writeTitle(String[] title) throws DataException {
+		try {
+			streamWriter.write(recordRender.rendingTitle(title) + CRLF);
+		} catch (IOException e) {
+			throw new DataException(e);
+		}
+		currentWritenLine++;
+	}
+
+	// public void writeRecord(String[] line) throws DataException {
+	// try {
+	// streamWriter.write(recordParser.parse(definition, line) + CRLF);
+	// } catch (IOException e) {
+	// throw new DataException(e);
+	// }
+	// currentWritenLine++;
+	// }
+	//
+	// public void writeRecord(Object[] line) throws DataException {
+	// try {
+	// streamWriter.write(recordParser.parse(definition, line) + CRLF);
+	// } catch (IOException e) {
+	// throw new DataException(e);
+	// }
+	// currentWritenLine++;
+	// }
+
+	public void writeAll(DataTable tableSet) throws DataException {
+
+		List<DataRecord> lines = tableSet.readFirstLines(500);
+		if (lines != null && lines.size() > 0) {
+			if (firstRowTitle) {
+				writeTitle(definition.getFieldNames());
+			}
+
+			do {
+				this.writeRecord(lines);
+				lines = tableSet.readNextLines(500);
+			} while (lines != null && lines.size() > 0);
+		}
+	}
+
+	public void close() {
+		if (bufferedReader != null) {
+			try {
+				bufferedReader.close();
+			} catch (IOException e) {
+			}
+			bufferedReader = null;
+		}
+
+		if (streamReader != null) {
+			// try {
+			// bufferedReader.close();
+			// } catch (IOException e) {
+			// }
+			streamReader = null;
+		}
+
+		if (streamWriter != null) {
+			try {
+				streamWriter.flush();
+				// outputStreamWriter.close();
+			} catch (IOException e) {
+			}
+			streamWriter = null;
+		}
+	}
+
+	// ----------------------------------------------------------------------------------------------
+
+	private void readTitleLine() throws DataException {
+		if (firstRowTitle) {
+			String title = null;
+			try {
+				title = bufferedReader.readLine();
+			} catch (IOException e) {
+				throw new DataException(e);
+			}
+
+			if (title != null) {
+				currentReadingLine++;
+				recordParser.detectColumn(definition, title, firstRowTitle);
+			}
+		}
+	}
+
+	private void detectFieldsDefinition() throws DataException {
+		String row = null;
+		try {
+			row = bufferedReader.readLine();
+		} catch (IOException e) {
+			throw new DataException(e);
+		}
+
+		if (row != null) {
+			recordParser.detectColumn(definition, row, false);
+		}
+	}
+
+	// private void resetFieldsType() throws DataException {
+	// String row = null;
+	// try {
+	// row = bufferedReader.readLine();
+	// } catch (IOException e) {
+	// throw new DataException(e);
+	// }
+	//
+	// currentReadingLine++;
+	//
+	// recordParser.detectFieldsType(definition, row);
+	// }
+
+	private void createReader() throws DataException {
+		try {
+			 if (this.bufferedReader != null) {
+			 this.bufferedReader.close();
+			 }
+			this.bufferedReader = new BufferedReader(this.streamReader);
+			this.currentReadingLine = 0;
+
+			for (int i = 1; i < startRow; i++) {
+				bufferedReader.readLine();
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new DataException(e);
+		}
+	}
+
+	public void truncate() throws DataException {
+		throw new DataException("Unsupport!");
+		// try {
+		// createWriter(false);
+		// } catch (DataException e) {
+		// e.printStackTrace();
+		// throw new DataException(e);
+		// }
+	}
+
+	public InputStreamReader getStreamReader() {
+		return streamReader;
+	}
+
+//	public void setStreamReader(InputStreamReader streamReader) {
+//		this.streamReader = streamReader;
+//	}
+
+	public OutputStreamWriter getStreamWriter() {
+		return streamWriter;
+	}
+
+//	public void setStreamWriter(OutputStreamWriter streamWriter) {
+//		this.streamWriter = streamWriter;
+//	}
+
+}
